@@ -48,4 +48,4 @@
 
 -define(ALPHANUMERIC, alphanumeric).
 -define(NUMERIC, numeric).
--define(BINARY, BINARY).
+-define(BINARY, binary).
