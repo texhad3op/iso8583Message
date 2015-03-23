@@ -1,0 +1,8 @@
+125GHY42
+
+length:42
+
+ascii :48485250
+bdc   :0042
+hex   :002A
+ebcdic:?
