@@ -4,22 +4,39 @@
 -include("field_constants.hrl").
 -record(field, {name,order_number}).
 
+f13()-> converters:bin_to_hex([48,48,48,48]).
+%io_lib:fread("~2u", "1110"). 
+%io_lib:format("~.2B", [15]).
+%list_to_integer(binary_to_list(X)).
+
 f12()->
 	MessageStructure = [
-					{#field{name=?LENGTH,order_number=0},{?NUMERIC, ?CODER_BCD}},
-					{#field{name=?MTI,order_number=1},{?NUMERIC, ?CODER_BCD}},
+					{#field{name=?LENGTH,order_number=-1},{?NUMERIC, ?CODER_BCD}},
+					{#field{name=?MTI,order_number=0},{?NUMERIC, ?CODER_BCD}},
+					{#field{name=?_1_BITMAP,order_number=1},{?NUMERIC, ?CODER_ASCII}},					
 					{#field{name=?_2_PRIMARY_ACCOUNT_NUMBER,order_number=2},{?NUMERIC, ?LLVAR, ?CODER_BCD}},
-					{#field{name=?_3_PROCESSING_CODE,order_number=3},{?NUMERIC, ?FIXED,?CODER_BCD,6}}
+					{#field{name=?_3_PROCESSING_CODE,order_number=3},{?NUMERIC, ?FIXED,?CODER_BCD,6}},
+					{#field{name=?_7_TRANSMISSION_DATE_AND_TIME,order_number=7},{?NUMERIC, ?FIXED,?CODER_BCD,10}},					
+					{#field{name=?_11_SYSTEM_TRACE_AUDIT_NUMBER,order_number=11},{?NUMERIC, ?FIXED,?CODER_BCD,6}}					
 					],
 
 	MessageValues = dict:from_list(
 		[
 		{?MTI, "0200"},
 		{?_2_PRIMARY_ACCOUNT_NUMBER, "9826132500000000181"},
-		{?_3_PROCESSING_CODE, "002000"}
+		{?_3_PROCESSING_CODE, "002000"},
+		{?_7_TRANSMISSION_DATE_AND_TIME, "1234567890"},		
+		{?_11_SYSTEM_TRACE_AUDIT_NUMBER, "000825"}		
 		]),
 
-	get_message_bitmap_as_array(MessageStructure, MessageValues).
+	Bitmap = get_message_bitmap_as_array(MessageStructure, MessageValues),
+	io:format(">>>>>>>>~p ~p~n",[length(Bitmap), Bitmap]),
+	
+	RearrangedStructure = rearrange_packager(MessageStructure),
+	EncodedBitmap = encode_bitmap(Bitmap, MessageStructure),
+	
+	io:format("!!>>>>>>>>~p~n",[EncodedBitmap]),
+	-7.
 
 
 f11()->
@@ -63,8 +80,8 @@ fill_ascii_zeroes(Bytes, Finish) when length(Bytes) < Finish ->	fill_ascii_zeroe
 fill_ascii_zeroes(Bytes, _) -> Bytes.	
 
 generate_length(RearrangedStructure, Val)->
-	case dict:find(0, RearrangedStructure) of
-		{ok,[{{_Field,_Length,0},{_Numeric,Coder}}]} -> 
+	case dict:find(-1, RearrangedStructure) of
+		{ok,[{{_Field,_Length,-1},{_Numeric,Coder}}]} -> 
 			case Coder of
 				?CODER_ASCII->fill_ascii_zeroes(integer_to_list(Val), 4);			
 				?CODER_HEX->
@@ -82,18 +99,46 @@ generate_length(RearrangedStructure, Val)->
 get_message_bitmap_as_array(ISOStructure, MessageValues)->
 	get_message_bitmap_as_array(ISOStructure, MessageValues, [1]).
 get_message_bitmap_as_array([{#field{name=Key,order_number=OrderNumber},_}|T], MessageValues, B)->
-	Val =  case dict:find(Key, MessageValues) of
-				{ok, _} -> 1;
-				error -> 0
-			end,
-	Bytes = case length(B)+1 == OrderNumber of
-				true -> [Val|B];
-				false -> [Val|fill_zeroes(B, OrderNumber)]
-			end,			
-	get_message_bitmap_as_array(T, MessageValues, Bytes);
-	
+	case Key of
+		?LENGTH->get_message_bitmap_as_array(T, MessageValues, B);
+		?MTI->get_message_bitmap_as_array(T, MessageValues, B);	
+		?_1_BITMAP->get_message_bitmap_as_array(T, MessageValues, B);	
+		_ ->
+			Val =  case dict:find(Key, MessageValues) of
+						{ok, _} -> 1;
+						error -> 0
+					end,
+			Bytes = case length(B)+1 == OrderNumber of
+						true -> [Val|B];
+						false -> [Val|fill_zeroes(B, OrderNumber)]
+					end,	
+			get_message_bitmap_as_array(T, MessageValues, Bytes)	
+	end;
 get_message_bitmap_as_array([], _, Bytes)->
 		lists:reverse(fill_zeroes(Bytes, 129)).	
 
-fill_zeroes(Bytes, Finish) when length(Bytes) < Finish -> fill_zeroes([0|Bytes], Finish);
-fill_zeroes(Bytes, _) -> Bytes.			
+fill_zeroes(Bytes, Finish) when length(Bytes) < Finish-1 -> fill_zeroes([0|Bytes], Finish);
+fill_zeroes(Bytes, _) -> Bytes.	
+
+get_bitmap(RearrangedStructure, Bitmap)->
+	Bytes = encode_bitmap(Bitmap),
+		case dict:find(1, RearrangedStructure) of
+			{ok,[{{_Field,_Length, 1},{_Numeric,Coder}}]} -> 
+				case Coder of
+					?CODER_ASCII->get_bitmap_as_ascii(Bitmap);			
+					?CODER_HEX->get_bitmap_as_hex(Bitmap);
+					?CODER_EBCDIC->""					
+				end;
+			_ -> io:format("Message length field format not specified.")		
+		end.
+	
+
+	
+encode_bitmap(Bitmap) when length(Bitmap) rem 4 == 0 -> encode_bitmap(Bitmap,[]).
+encode_bitmap([B1,B2,B3,B4|ReminderBitmap], Result)->	
+		Val = [48+B1,48+B2,48+B3,48+B4],
+		Converted = converters:bin_to_hex(Val),
+		encode_bitmap(ReminderBitmap, [Converted|Result]);
+encode_bitmap([], Result) -> lists:reverse(Result).	
+		
+		

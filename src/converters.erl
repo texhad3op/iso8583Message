@@ -20,3 +20,7 @@ to_hex([H1,H2|T], Res)->
 	R = list_to_integer([H1,H2], 16),
 	to_hex(T, [R|Res]);
 to_hex([], Res)-> lists:reverse(Res).
+
+bin_to_hex(BinString)-> 
+	{ok,[Val],[]} = io_lib:fread("~2u", BinString),
+	Val. 

@@ -1,10 +1,11 @@
 -define(LENGTH, length).
 -define(MTI, mti).
+-define(_1_BITMAP, bitmap).
 -define(_2_PRIMARY_ACCOUNT_NUMBER, primary_account_number).
 -define(_3_PROCESSING_CODE, processing_code).
 -define(AMOUNT_TRANSACTION, amount_transaction).
--define(TRANSMISSION_DATE_AND_TIME, transmission_date_and_time).
--define(SYSTEM_TRACE_AUDIT_NUMBER, system_trace_audit_number).
+-define(_7_TRANSMISSION_DATE_AND_TIME, transmission_date_and_time).
+-define(_11_SYSTEM_TRACE_AUDIT_NUMBER, system_trace_audit_number).
 -define(TIME_LOCAL_TRANSACTION, time_local_transaction).
 -define(DATE_LOCAL_TRANSACTION, date_local_transaction).
 -define(DATE_EXPIRATION, date_expiration).
