@@ -1,13 +1,15 @@
 -module(converters).
 -compile(export_all).
 
+f()-> to_bcd("0034").
+
 to_bcd(String)-> 
 	case length(String) rem 2 of
 		0->to_bcd(String, []);
 		1->to_bcd(["0"|String], [])
 	end.
 to_bcd([H1,H2|T], Res)->
-	R = ((H1-48) bsl 4)+(H2-48),
+	R = list_to_integer([H1, H2]),
 	to_bcd(T, [R|Res]);
 to_bcd([], Res)-> lists:reverse(Res).
 

@@ -13,7 +13,7 @@ f12()->
 	MessageStructure = [
 					{#field{name=?LENGTH,order_number=-1},{?NUMERIC, ?CODER_BCD}},
 					{#field{name=?MTI,order_number=0},{?NUMERIC, ?CODER_BCD}},
-					{#field{name=?_1_BITMAP,order_number=1},{?NUMERIC, ?CODER_ASCII}},					
+					{#field{name=?_1_BITMAP,order_number=1},{?NUMERIC, ?CODER_HEX}},					
 					{#field{name=?_2_PRIMARY_ACCOUNT_NUMBER,order_number=2},{?NUMERIC, ?LLVAR, ?CODER_BCD}},
 					{#field{name=?_3_PROCESSING_CODE,order_number=3},{?NUMERIC, ?FIXED,?CODER_BCD,6}},
 					{#field{name=?_7_TRANSMISSION_DATE_AND_TIME,order_number=7},{?NUMERIC, ?FIXED,?CODER_BCD,10}},					
@@ -29,33 +29,12 @@ f12()->
 		{?_11_SYSTEM_TRACE_AUDIT_NUMBER, "000825"}		
 		]),
 
-	Bitmap = get_message_bitmap_as_array(MessageStructure, MessageValues),
-	io:format(">>>>>>>>~p ~p~n",[length(Bitmap), Bitmap]),
-	
-	RearrangedStructure = rearrange_packager(MessageStructure),
-	EncodedBitmap = encode_bitmap(Bitmap, MessageStructure),
-	
-	io:format("!!>>>>>>>>~p~n",[EncodedBitmap]),
+		Message = generate_message(MessageStructure, MessageValues),
+		io:format("Final:~p~n",[Message]),
+		
 	-7.
 
 
-f11()->
-	MessageStructure = [
-					{#field{name=?LENGTH,order_number=0},{?NUMERIC, ?CODER_BCD}},
-					{#field{name=?MTI,order_number=1},{?NUMERIC, ?CODER_BCD}},
-					{#field{name=?_2_PRIMARY_ACCOUNT_NUMBER,order_number=2},{?NUMERIC, ?LLVAR, ?CODER_BCD}},
-					{#field{name=?_3_PROCESSING_CODE,order_number=3},{?NUMERIC, ?FIXED,?CODER_BCD,6}}
-					],
-
-	MessageValues = dict:from_list(
-		[
-		{?MTI, "0200"},
-		{?_2_PRIMARY_ACCOUNT_NUMBER, "9826132500000000181"},
-		{?_3_PROCESSING_CODE, "002000"}
-		]),
-		
-		Bin = generate_message(MessageStructure, MessageValues).
-	
 rearrange_packager(List)->	
 	rearrange_packager(List, dict:new()).
 rearrange_packager([{#field{name=_,order_number=OrderNumber},_} = Head|T], Dict)->
@@ -67,13 +46,26 @@ generate_message(MessageStructure, MessageValues)->generate_message(MessageStruc
 generate_message(MessageStructure, MessageValues, HeaderAsList)->
 	RearrangedStructure = rearrange_packager(MessageStructure),
 	Message = generate_internal_message(MessageStructure, MessageValues),
-	MessageWithHeader = case HeaderAsList of
-							nil->Message;
-							_->lists:append(HeaderAsList, Message)
-						end,
-	MessageLength = generate_length(RearrangedStructure, length(Message)),
-	list_to_binary([MessageLength|MessageWithHeader]).
+	io:format(">>>>>>>>:Message~p~n",[Message]),	
+	EncodedBitmap = get_bitmap(RearrangedStructure, get_message_bitmap_as_array(MessageStructure, MessageValues)),
+	io:format(">>>>>>>>:EncodedBitmap~p~n",[EncodedBitmap]),
+	MessageAsArray = get_message_as_array(RearrangedStructure, HeaderAsList, EncodedBitmap, Message),
+	list_to_binary(MessageAsArray).
 
+	
+	
+	
+get_message_as_array(RearrangedStructure, MessageHeader, Bitmap, Message)->
+		MessageWithoutLength = 
+			case MessageHeader of
+				nil->Bitmap++Message;
+				_->MessageHeader++Bitmap++Message
+			end,
+		MessageLength = generate_length(RearrangedStructure, length(MessageWithoutLength)),
+		io:format(">>>>>>>>:MessageLength~p~n",[MessageLength]),
+		MessageLength++MessageWithoutLength.		
+		
+	
 generate_internal_message(MessageStructure, MessageValues)-> [4,8].
 
 fill_ascii_zeroes(Bytes, Finish) when length(Bytes) < Finish ->	fill_ascii_zeroes([48|Bytes], Finish);
@@ -89,6 +81,7 @@ generate_length(RearrangedStructure, Val)->
 					converters:to_hex(String);
 				?CODER_BCD->
 					String = fill_ascii_zeroes(integer_to_list(Val), 4),
+					io:format(">>>>>>>>:BCD~p~n",[String]),
 					converters:to_bcd(String);
 				?CODER_EBCDIC->
 					""					
@@ -122,15 +115,16 @@ fill_zeroes(Bytes, _) -> Bytes.
 
 get_bitmap(RearrangedStructure, Bitmap)->
 	Bytes = encode_bitmap(Bitmap),
-		case dict:find(1, RearrangedStructure) of
-			{ok,[{{_Field,_Length, 1},{_Numeric,Coder}}]} -> 
-				case Coder of
-					?CODER_ASCII->get_bitmap_as_ascii(Bitmap);			
-					?CODER_HEX->get_bitmap_as_hex(Bitmap);
-					?CODER_EBCDIC->""					
-				end;
-			_ -> io:format("Message length field format not specified.")		
-		end.
+	io:format(">>Result:~p~n",[Bytes]),
+	case dict:find(1, RearrangedStructure) of
+		{ok,[{{_Field,_Length, 1},{_Numeric,Coder}}]} -> 
+			case Coder of
+				?CODER_ASCII->get_bitmap_as_ascii(Bytes);			
+				?CODER_HEX->get_bitmap_as_hex(Bytes);
+				?CODER_EBCDIC->""					
+			end;
+		_ -> io:format("Message length field format not specified.")		
+	end.
 	
 
 	
@@ -141,4 +135,11 @@ encode_bitmap([B1,B2,B3,B4|ReminderBitmap], Result)->
 		encode_bitmap(ReminderBitmap, [Converted|Result]);
 encode_bitmap([], Result) -> lists:reverse(Result).	
 		
+get_bitmap_as_hex(Bitmap)->	Bitmap.
+
+get_bitmap_as_ascii(Bitmap)->get_bitmap_as_ascii(Bitmap, []).
+get_bitmap_as_ascii([H|T], Result)->
+		io:format(">>BitmapElement:~p~n",[H+48]),
+		get_bitmap_as_ascii(T, [H+48|Result]);	
+get_bitmap_as_ascii([], Result)->lists:reverse(Result).
 		
